@@ -1,0 +1,63 @@
+/* Main single select container */
+.select2-container--default .select2-selection--single {
+    @apply h-11 w-full appearance-none rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 pr-11 text-sm text-gray-800 shadow-theme-xs focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800;
+}
+
+/* Rendered selected item */
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    @apply text-gray-800 dark:text-white/90;
+}
+/* search field */
+.select2-container--default .select2-search--dropdown .select2-search__field:focus {
+  @apply outline-none ring-0 border-transparent;
+}
+
+.select2-container--default .select2-search--inline .select2-search__field:focus {
+  @apply outline-none ring-0 border-transparent;
+}
+
+/* Placeholder text */
+.select2-container--default .select2-selection--single .select2-selection__placeholder {
+    @apply text-gray-500 dark:text-white/30;
+}
+
+/* Arrow dropdown icon */
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    @apply absolute top-0 right-0 h-11 w-11   flex items-center justify-center;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow b {
+    @apply block w-0 h-0 border-l-4 border-r-4 border-t-4;
+    border-color: #000 transparent transparent transparent;
+    margin-top: 6px;
+    margin-left: 2px;
+}
+
+/* Disabled select */
+.select2-container--default.select2-container--disabled .select2-selection--single {
+    @apply cursor-not-allowed bg-gray-200 dark:bg-gray-700;
+}
+
+.select2-container--default.select2-container--disabled .select2-selection__clear {
+    @apply hidden;
+}
+
+/* Dropdown options list */
+.select2-container--default .select2-results > .select2-results__options {
+    @apply max-h-48 overflow-y-auto text-sm;
+}
+
+/* Option item */
+.select2-container--default .select2-results__option {
+    @apply px-4 py-2 cursor-pointer;
+}
+
+/* Highlighted option */
+.select2-container--default .select2-results__option--highlighted[aria-selected] {
+    @apply bg-brand-100 dark:bg-brand-700 text-brand-900 dark:text-white;
+}
+
+/* Selected option */
+.select2-container--default .select2-results__option[aria-selected=true] {
+    @apply bg-brand-200 text-brand-900;
+}
