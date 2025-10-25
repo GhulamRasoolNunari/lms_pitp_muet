@@ -107,8 +107,8 @@ jobs:
       - name: Upload to cPanel via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ftp.pitp.online
-          username: ghulamrasool
-          password: ${{ secrets.CPANEL_PASSWORD }}
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
           local-dir: dist/
-          server-dir: public_html/folder/production/
+          server-dir: ${{ secrets.FTP_REMOTE_DIR }}
