@@ -24,6 +24,19 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-dev --optimize-autoloader
 
+      - name: Install Node.js and build assets (if package.json exists)
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+        continue-on-error: true
+
+      - name: Build frontend assets
+        if: hashFiles('package.json') != ''
+        run: |
+          npm ci
+          npm run build
+
       - name: Prepare deployment package
         run: |
           mkdir deploy
