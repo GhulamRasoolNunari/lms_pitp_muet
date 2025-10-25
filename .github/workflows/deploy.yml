@@ -99,6 +99,6 @@ jobs:
             exit 0
           fi
           git commit -m "Auto deploy from master (${GITHUB_SHA})"
-          git push "$REPO_URL" HEAD:refs/heads/main
+          git push -f "$REPO_URL" HEAD:refs/heads/main
 
           echo "Deployed to main branch."
