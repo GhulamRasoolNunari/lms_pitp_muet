@@ -1,59 +1,104 @@
-name: Deploy Laravel to GoDaddy
+name: Laravel Auto Deploy to Main
 
 on:
   push:
     branches:
-      - main
+      - master   # trigger when you push to master branch
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-publish
+  cancel-in-progress: true
+
+env:
+  APP_PATH: .   # Laravel project root
 
 jobs:
-  deploy:
-    name: Deploy to GoDaddy
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout master branch
         uses: actions/checkout@v4
 
-      - name: Setup PHP 8.4
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: mbstring, bcmath, intl, dom, pdo, curl, tokenizer, xml, fileinfo, gd
-          tools: composer
-
-      - name: Install Composer dependencies
-        run: composer install --no-dev --optimize-autoloader
-
-      - name: Install Node.js and build assets (if package.json exists)
-        if: hashFiles('package.json') != ''
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-        continue-on-error: true
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Build frontend assets
-        if: hashFiles('package.json') != ''
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend assets (Vite)
+        run: npm run build
+
+      - name: Show Vite build output (debug)
         run: |
-          npm ci
-          npm run build
+          ls -la public || true
+          ls -la public/build || true
+          test -f public/build/manifest.json
 
-      - name: Prepare deployment package
-        run: |
-          mkdir deploy
-          rsync -av --exclude=".git" \
-                    --exclude=".github" \
-                    --exclude="node_modules" \
-                    --exclude=".env" \
-                    --exclude="storage/logs/*" \
-                    --exclude="storage/framework/cache/*" \
-                    ./ ./deploy/
-
-      - name: Deploy to GoDaddy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
         with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: deploy
-          server-dir: /public_html/folder/production/
-          dangerous-clean-slate: false
+          php-version: '8.3'
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      - name: Prepare dist folder
+        run: |
+          mkdir dist
+          rsync -a ./ dist/ \
+            --exclude ".git" --exclude ".github" --exclude "node_modules" \
+            --exclude "tests" --exclude ".env*"
+          test -f dist/public/build/manifest.json
+          printf "%s\n" \
+            ".env" \
+            ".env.*" \
+            "storage/logs" \
+            "storage/framework/cache/data/*" \
+            "storage/framework/sessions/*" \
+            "storage/framework/views/*" > dist/.gitignore
+
+      - name: Deploy to main branch
+        env:
+          REPO_URL: https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/${{ github.repository }}.git
+        run: |
+          set -e
+
+          echo "Checking repository access..."
+          git ls-remote "$REPO_URL" >/dev/null
+
+          # Clone main branch or create if not exist
+          if git ls-remote --exit-code "$REPO_URL" refs/heads/main >/dev/null 2>&1; then
+            git clone --depth=1 --branch=main "$REPO_URL" deploy
+          else
+            git clone --depth=1 "$REPO_URL" deploy
+            cd deploy
+            git checkout --orphan main
+            git rm -rf .
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git commit --allow-empty -m "Initialize main branch"
+            git push "$REPO_URL" HEAD:refs/heads/main
+            cd ..
+          fi
+
+          rsync -a --delete dist/ deploy/
+          cd deploy
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to deploy."
+            exit 0
+          fi
+          git commit -m "Auto deploy from master (${GITHUB_SHA})"
+          git push "$REPO_URL" HEAD:refs/heads/main
+
+          echo "Deployed to main branch."
