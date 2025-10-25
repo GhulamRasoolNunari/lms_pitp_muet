@@ -1,0 +1,59 @@
+name: Deploy Laravel to GoDaddy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to GoDaddy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, bcmath, intl, dom, pdo, curl, tokenizer, xml, fileinfo, gd
+          tools: composer
+
+      - name: Install Composer dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Install Node.js and build assets (if package.json exists)
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+        continue-on-error: true
+
+      - name: Build frontend assets
+        if: hashFiles('package.json') != ''
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prepare deployment package
+        run: |
+          mkdir deploy
+          rsync -av --exclude=".git" \
+                    --exclude=".github" \
+                    --exclude="node_modules" \
+                    --exclude=".env" \
+                    --exclude="storage/logs/*" \
+                    --exclude="storage/framework/cache/*" \
+                    ./ ./deploy/
+
+      - name: Deploy to GoDaddy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: deploy
+          server-dir: /public_html/folder/production/
+          dangerous-clean-slate: false
