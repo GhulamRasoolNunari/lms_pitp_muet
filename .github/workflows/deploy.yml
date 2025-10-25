@@ -1,0 +1,61 @@
+name: Deploy to GoDaddy via FTP
+
+on:
+  push:
+    branches:
+      - master    # change if you deploy from another branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v4
+        with:
+          php-version: '8.1'        # change to the PHP version you want
+          tools: composer
+
+      - name: Install Composer dependencies (no-dev)
+        run: |
+          composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction
+
+      - name: Run Laravel optimisation (only if framework present)
+        run: |
+          php artisan config:cache || true
+          php artisan route:cache || true
+          php artisan view:cache || true
+
+      - name: Prepare deploy directory
+        run: |
+          # Create a deploy folder, copy everything except .git, node_modules (adjust as needed)
+          rm -rf deploy || true
+          mkdir deploy
+          rsync -av --exclude='.git' --exclude='node_modules' --exclude='.github' ./ deploy/
+          # Ensure vendor exists (composer installed above), and include it
+          ls -la deploy | sed -n '1,120p'
+
+      - name: Zip deploy folder
+        run: |
+          cd deploy
+          zip -r ../deploy.zip . >/dev/null
+          cd ..
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: deploy
+          server-dir: ${{ secrets.FTP_REMOTE_DIR }}
+          # optionally set passive: true   # you can add additional options if needed
+
+      - name: Clean up
+        run: |
+          rm -rf deploy deploy.zip || true
