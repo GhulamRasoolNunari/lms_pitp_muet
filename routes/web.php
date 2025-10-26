@@ -31,8 +31,6 @@ use Livewire\Livewire;
 //     return Route::post('/gexton-lms-mehran/public/livewire/update', $handle);
 // });
 
-//test
-
 Route::middleware('auth')->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::get('/dashboard', Dashboard::class)->name('dashboard');
