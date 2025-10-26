@@ -102,13 +102,3 @@ jobs:
           git push -f "$REPO_URL" HEAD:refs/heads/main
 
           echo "Deployed to main branch."
-
-      # ✅ New step: Upload to cPanel via FTP
-      - name: Upload to cPanel via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: dist/
-          server-dir: ${{ secrets.FTP_REMOTE_DIR }}
