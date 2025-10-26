@@ -8,7 +8,7 @@ on:
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
-    name: Upload to GoDaddy via FTP
+    name: Upload to cPanel via FTP
     steps:
       - name: Checkout deploy branch
         uses: actions/checkout@v4
@@ -16,11 +16,12 @@ jobs:
       - name: Upload to cPanel
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ftp.pitp.online
-          username: rvmnzthzcur6@pitp.online
+          server: 118.139.181.152
+          username: rvmnzthzcur6
           password: ${{ secrets.CPANEL_FTP_PASSWORD }}
           server-dir: /public_html/pitp.online/production/
           local-dir: ./
+          port: 21
           exclude: |
             **/.git*
             **/.github*
