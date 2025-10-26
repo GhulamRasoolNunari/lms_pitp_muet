@@ -117,18 +117,4 @@ jobs:
           git fetch origin deploy
           git rebase origin/deploy
           git push -v "$REPO_URL" HEAD:refs/heads/deploy
-
-      # ✅ === Auto-deploy to cPanel via FTP after push ===
-      - name: Deploy to cPanel (GoDaddy FTP)
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.CPANEL_FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.CPANEL_FTP_PASSWORD }}
-          server-dir: ${{ secrets.CPANEL_FTP_SERVER_DIR }}
-          local-dir: ./dist/
-          exclude: |
-            **/.git*
-            **/.github*
-            **/node_modules/**
-            **/tests/**
+          
