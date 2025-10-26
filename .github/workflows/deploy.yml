@@ -1,41 +1,45 @@
-name: Laravel Auto Deploy to Main
+name: Build & Publish Deploy Branch
 
 on:
   push:
-    branches:
-      - master   # trigger when you push to master branch
+    branches: [ master ]   # trigger on pushes to master
 
+# let the workflow commit if we ever switch back to GITHUB_TOKEN
 permissions:
   contents: write
 
+# avoid race conditions: if multiple pushes happen quickly, cancel older runs
 concurrency:
   group: deploy-publish
   cancel-in-progress: true
 
 env:
-  APP_PATH: .   # Laravel project root
+  APP_PATH: .   # your app is at repo root
 
 jobs:
-  build-and-deploy:
+  build-and-publish:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout master branch
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Node dependencies
+      - name: Install Node deps
+        working-directory: ${{ env.APP_PATH }}
         run: npm ci
 
-      - name: Build frontend assets (Vite)
+      - name: Build assets (Vite)
+        working-directory: ${{ env.APP_PATH }}
         run: npm run build
 
-      - name: Show Vite build output (debug)
+      - name: Show Vite output (debug)
+        working-directory: ${{ env.APP_PATH }}
         run: |
           ls -la public || true
           ls -la public/build || true
@@ -47,16 +51,19 @@ jobs:
           php-version: '8.3'
           coverage: none
 
-      - name: Install Composer dependencies
+      - name: Install Composer deps (prod)
+        working-directory: ${{ env.APP_PATH }}
         run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
-      - name: Prepare dist folder
+      - name: Prepare dist snapshot
         run: |
-          mkdir dist
-          rsync -a ./ dist/ \
+          set -e
+          rsync -a "${APP_PATH}/" dist/ \
             --exclude ".git" --exclude ".github" --exclude "node_modules" \
             --exclude "tests" --exclude ".env*"
+          # hard fail if vite manifest missing
           test -f dist/public/build/manifest.json
+          # keep runtime stuff out of git
           printf "%s\n" \
             ".env" \
             ".env.*" \
@@ -65,40 +72,60 @@ jobs:
             "storage/framework/sessions/*" \
             "storage/framework/views/*" > dist/.gitignore
 
-      - name: Deploy to main branch
+      # === Publish to `deploy` without force; always base on latest remote tip ===
+      - name: Publish deploy branch (fast-forward, no force)
         env:
+          # Repo secret: DEPLOY_TOKEN = fine-grained PAT scoped to this repo with Contents: Read & write
           REPO_URL: https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/${{ github.repository }}.git
+          GIT_TRACE: "1"
+          GIT_CURL_VERBOSE: "1"
         run: |
-          set -e
+          set -euo pipefail
+          set -x
 
-          echo "Checking repository access..."
+          echo "Preflight auth check against $REPO_URL"
           git ls-remote "$REPO_URL" >/dev/null
 
-          # Clone main branch or create if not exist
-          if git ls-remote --exit-code "$REPO_URL" refs/heads/main >/dev/null 2>&1; then
-            git clone --depth=1 --branch=main "$REPO_URL" deploy
+          # If deploy exists, clone it; else initialize it
+          if git ls-remote --exit-code "$REPO_URL" refs/heads/deploy >/dev/null 2>&1; then
+            git clone --depth=1 --branch=deploy "$REPO_URL" deploy-repo
           else
-            git clone --depth=1 "$REPO_URL" deploy
-            cd deploy
-            git checkout --orphan main
+            git clone --depth=1 "$REPO_URL" deploy-repo
+            cd deploy-repo
+            git checkout --orphan deploy
             git rm -rf .
             git config user.name "github-actions"
             git config user.email "actions@github.com"
-            git commit --allow-empty -m "Initialize main branch"
-            git push "$REPO_URL" HEAD:refs/heads/main
+            git commit --allow-empty -m "Initialize deploy branch"
+            git push -v "$REPO_URL" HEAD:refs/heads/deploy
             cd ..
           fi
 
-          rsync -a --delete dist/ deploy/
-          cd deploy
+          cd deploy-repo
+          # Make 100% sure we're on top of the latest remote tip
+          git fetch origin deploy
+          git checkout deploy
+          git reset --hard origin/deploy
+
+          cd ..
+          # Replace contents with freshly built dist/
+          rsync -a --delete dist/ deploy-repo/
+
+          cd deploy-repo
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add -A
+
           if git diff --cached --quiet; then
             echo "No changes to deploy."
             exit 0
           fi
-          git commit -m "Auto deploy from master (${GITHUB_SHA})"
-          git push -f "$REPO_URL" HEAD:refs/heads/main
 
-          echo "Deployed to main branch."
+          git commit -m "Deploy from ${GITHUB_SHA}"
+
+          # In case remote advanced between clone and now, rebase on latest tip
+          git fetch origin deploy
+          git rebase origin/deploy
+
+          # Push using explicit ref; should be a FF after rebase
+          git push -v "$REPO_URL" HEAD:refs/heads/deploy
