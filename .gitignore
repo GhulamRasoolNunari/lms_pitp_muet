@@ -21,7 +21,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-/public
+# /public
 vendor.zip
 node_modules.zip
 /dist/
