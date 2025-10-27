@@ -76,7 +76,7 @@ jobs:
       - name: Publish deploy branch (fast-forward, no force)
         env:
           # Repo secret: DEPLOY_TOKEN = fine-grained PAT scoped to this repo with Contents: Read & write
-          REPO_URL: https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/${{ github.repository }}.git
+          REPO_URL: https://x-access-token:${{ secrets.DeployToken }}@github.com/${{ github.repository }}.git
           GIT_TRACE: "1"
           GIT_CURL_VERBOSE: "1"
         run: |
