@@ -2,8 +2,17 @@ name: Deploy Laravel to GoDaddy
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]   # ✅ change from master to main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-publish
+  cancel-in-progress: true
+
+env:
+  APP_PATH: .   # your app is at repo root
 
 jobs:
   deploy:
@@ -48,12 +57,43 @@ jobs:
                     --exclude="storage/framework/cache/*" \
                     ./ ./deploy/
 
-      - name: Deploy to GoDaddy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@4.3.0
-        with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: deploy
-          server-dir: /public_html/folder/production/
-          dangerous-clean-slate: false
+          echo "Preflight auth check against $REPO_URL"
+          git ls-remote "$REPO_URL" >/dev/null
+
+          if git ls-remote --exit-code "$REPO_URL" refs/heads/deploy >/dev/null 2>&1; then
+            git clone --depth=1 --branch=deploy "$REPO_URL" deploy-repo
+          else
+            git clone --depth=1 "$REPO_URL" deploy-repo
+            cd deploy-repo
+            git checkout --orphan deploy
+            git rm -rf .
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git commit --allow-empty -m "Initialize deploy branch"
+            git push -v "$REPO_URL" HEAD:refs/heads/deploy
+            cd ..
+          fi
+
+          cd deploy-repo
+          git fetch origin deploy
+          git checkout deploy
+          git reset --hard origin/deploy
+
+          cd ..
+          rsync -a --delete dist/ deploy-repo/
+
+          cd deploy-repo
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to deploy."
+            exit 0
+          fi
+
+          git commit -m "Deploy from ${GITHUB_SHA}"
+          git fetch origin deploy
+          git rebase origin/deploy
+          git push -v "$REPO_URL" HEAD:refs/heads/deploy
+
