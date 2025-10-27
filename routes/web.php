@@ -82,3 +82,5 @@ Route::controller(LoginController::class)->group(function () {
         ->name('login.attempt');
     Route::post('/logout', 'logout')->name('logout');
 });
+
+// Test
