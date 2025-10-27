@@ -61,8 +61,14 @@ jobs:
           rsync -a "${APP_PATH}/" dist/ \
             --exclude ".git" --exclude ".github" --exclude "node_modules" \
             --exclude "tests" --exclude ".env*"
+
+          # ✅ FIX ADDED — copy vite build output into dist/public/build
+          mkdir -p dist/public/build
+          rsync -a "${APP_PATH}/public/build/" dist/public/build/ || true
+
           # hard fail if vite manifest missing
           test -f dist/public/build/manifest.json
+
           # keep runtime stuff out of git
           printf "%s\n" \
             ".env" \
@@ -75,7 +81,6 @@ jobs:
       # === Publish to `deploy` without force; always base on latest remote tip ===
       - name: Publish deploy branch (fast-forward, no force)
         env:
-          # Repo secret: DEPLOY_TOKEN = fine-grained PAT scoped to this repo with Contents: Read & write
           REPO_URL: https://x-access-token:${{ secrets.DeployToken }}@github.com/${{ github.repository }}.git
           GIT_TRACE: "1"
           GIT_CURL_VERBOSE: "1"
@@ -86,7 +91,6 @@ jobs:
           echo "Preflight auth check against $REPO_URL"
           git ls-remote "$REPO_URL" >/dev/null
 
-          # If deploy exists, clone it; else initialize it
           if git ls-remote --exit-code "$REPO_URL" refs/heads/deploy >/dev/null 2>&1; then
             git clone --depth=1 --branch=deploy "$REPO_URL" deploy-repo
           else
@@ -102,13 +106,11 @@ jobs:
           fi
 
           cd deploy-repo
-          # Make 100% sure we're on top of the latest remote tip
           git fetch origin deploy
           git checkout deploy
           git reset --hard origin/deploy
 
           cd ..
-          # Replace contents with freshly built dist/
           rsync -a --delete dist/ deploy-repo/
 
           cd deploy-repo
@@ -122,10 +124,6 @@ jobs:
           fi
 
           git commit -m "Deploy from ${GITHUB_SHA}"
-
-          # In case remote advanced between clone and now, rebase on latest tip
           git fetch origin deploy
           git rebase origin/deploy
-
-          # Push using explicit ref; should be a FF after rebase
           git push -v "$REPO_URL" HEAD:refs/heads/deploy
