@@ -1,4 +1,4 @@
-name: Deploy Laravel to GoDaddy
+name: Build & Publish Deploy Branch
 
 on:
   push:
@@ -15,36 +15,33 @@ env:
   APP_PATH: .   # your app is at repo root
 
 jobs:
-  deploy:
-    name: Deploy to GoDaddy
+  build-and-publish:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP 8.4
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: mbstring, bcmath, intl, dom, pdo, curl, tokenizer, xml, fileinfo, gd
-          tools: composer
-
-      - name: Install Composer dependencies
-        run: composer install --no-dev --optimize-autoloader
-
-      - name: Install Node.js and build assets (if package.json exists)
-        if: hashFiles('package.json') != ''
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-        continue-on-error: true
+          node-version: '20'
+          cache: 'npm'
 
-      - name: Build frontend assets
-        if: hashFiles('package.json') != ''
+      - name: Install Node deps
+        working-directory: ${{ env.APP_PATH }}
+        run: npm ci
+
+      - name: Build assets (Vite)
+        working-directory: ${{ env.APP_PATH }}
+        run: npm run build
+
+      - name: Show Vite output (debug)
+        working-directory: ${{ env.APP_PATH }}
         run: |
-          npm ci
-          npm run build
+          ls -la public || true
+          ls -la public/build || true
+          test -f public/build/manifest.json
 
       - name: Prepare deployment package
         run: |
@@ -96,4 +93,3 @@ jobs:
           git fetch origin deploy
           git rebase origin/deploy
           git push -v "$REPO_URL" HEAD:refs/heads/deploy
-
