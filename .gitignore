@@ -21,15 +21,16 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-/public
+# /public
 vendor.zip
 node_modules.zip
 # /dist/
-/deploy-repo/
+#/deploy-repo/
 guideline/developer-notes.txt
 /guideline
 /resources/views/partials/sidebar/local.blade.php
 
 # DO NOT ignore built assets
+!/public
 !/public/build
 !/public/build/**
