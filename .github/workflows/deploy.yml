@@ -1,49 +1,36 @@
-name: Build & Publish Deploy Branch
+name: Build & Deploy Branch
 
 on:
   push:
-    branches: [ main ]   # trigger on pushes to main
+    branches:
+      - main
 
-# let the workflow commit if we ever switch back to GITHUB_TOKEN
 permissions:
   contents: write
 
-# avoid race conditions: if multiple pushes happen quickly, cancel older runs
 concurrency:
   group: deploy-publish
   cancel-in-progress: true
 
-env:
-  APP_PATH: .   # your app is at repo root
-
 jobs:
-  build-and-publish:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Node deps
-        working-directory: ${{ env.APP_PATH }}
+      - name: Install Node.js dependencies
         run: npm ci
 
-      - name: Build assets (Vite)
-        working-directory: ${{ env.APP_PATH }}
+      - name: Build frontend (Vite)
         run: npm run build
-
-      - name: Show Vite output (debug)
-        working-directory: ${{ env.APP_PATH }}
-        run: |
-          ls -la public || true
-          ls -la public/build || true
-          test -f public/build/manifest.json
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -51,64 +38,44 @@ jobs:
           php-version: '8.3'
           coverage: none
 
-      - name: Install Composer deps (prod)
-        working-directory: ${{ env.APP_PATH }}
+      - name: Install Composer dependencies (with vendor)
         run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
-      - name: Prepare dist snapshot
+      - name: Prepare dist folder
         run: |
-          set -e
-          rsync -a "${APP_PATH}/" dist/ \
-            --exclude ".git" --exclude ".github" --exclude "node_modules" \
-            --exclude "tests" --exclude ".env*"
+          mkdir dist
+          rsync -a ./ dist/ \
+            --exclude ".git" \
+            --exclude ".github" \
+            --exclude "tests" \
+            --exclude ".env*" \
+            --exclude "storage/logs" \
+            --exclude "storage/framework/sessions" \
+            --exclude "storage/framework/views"
 
-          # ✅ FIX ADDED — copy vite build output into dist/public/build
+          # Ensure build output exists
           mkdir -p dist/public/build
-          rsync -a "${APP_PATH}/public/build/" dist/public/build/ || true
-
-          # hard fail if vite manifest missing
+          rsync -a public/build/ dist/public/build/ || true
           test -f dist/public/build/manifest.json
 
-          # keep runtime stuff out of git
-          printf "%s\n" \
-            ".env" \
-            ".env.*" \
-            "storage/logs" \
-            "storage/framework/cache/data/*" \
-            "storage/framework/sessions/*" \
-            "storage/framework/views/*" > dist/.gitignore
+          echo ".env" > dist/.gitignore
+          echo "storage/*" >> dist/.gitignore
 
-      # === Publish to `deploy` without force; always base on latest remote tip ===
-      - name: Publish deploy branch (fast-forward, no force)
+      - name: Push to deploy branch
         env:
-          REPO_URL: https://x-access-token:${{ secrets.DeployToken }}@github.com/${{ github.repository }}.git
-          GIT_TRACE: "1"
-          GIT_CURL_VERBOSE: "1"
+          REPO_URL: https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/${{ github.repository }}.git
         run: |
-          set -euo pipefail
-          set -x
+          set -e
 
-          echo "Preflight auth check against $REPO_URL"
-          git ls-remote "$REPO_URL" >/dev/null
-
-          if git ls-remote --exit-code "$REPO_URL" refs/heads/deploy >/dev/null 2>&1; then
-            git clone --depth=1 --branch=deploy "$REPO_URL" deploy-repo
-          else
-            git clone --depth=1 "$REPO_URL" deploy-repo
-            cd deploy-repo
-            git checkout --orphan deploy
-            git rm -rf .
-            git config user.name "github-actions"
-            git config user.email "actions@github.com"
-            git commit --allow-empty -m "Initialize deploy branch"
-            git push -v "$REPO_URL" HEAD:refs/heads/deploy
-            cd ..
-          fi
-
+          # Clone fresh deploy branch
+          git clone --depth=1 "$REPO_URL" deploy-repo || true
           cd deploy-repo
-          git fetch origin deploy
-          git checkout deploy
-          git reset --hard origin/deploy
+
+          if git rev-parse --verify deploy >/dev/null 2>&1; then
+            git checkout deploy
+          else
+            git checkout --orphan deploy
+          fi
 
           cd ..
           rsync -a --delete dist/ deploy-repo/
@@ -118,22 +85,5 @@ jobs:
           git config user.email "actions@github.com"
           git add -A
 
-          # ✅ Always make a commit (even if no diff)
-          if git diff --cached --quiet; then
-            echo "Forcing deploy commit (even if no diff)"
-            git commit --allow-empty -m "Force redeploy from ${GITHUB_SHA}"
-          else
-            git commit -m "Deploy from ${GITHUB_SHA}"
-          fi
-
-          # ✅ Fetch latest deploy branch
-          git fetch origin deploy || true
-
-          # ✅ Reset to remote to avoid conflicts
-          git reset --soft origin/deploy || true
-
-          # ✅ Pull with rebase to stay ahead
-          git pull origin deploy --rebase --strategy-option=ours || true
-
-          # ✅ Finally push with force-with-lease (safe force)
-          git push --force-with-lease -v "$REPO_URL" HEAD:refs/heads/deploy
+          git commit -m "Auto deploy from ${GITHUB_SHA}" || echo "No changes to commit"
+          git push -f "$REPO_URL" HEAD:deploy
