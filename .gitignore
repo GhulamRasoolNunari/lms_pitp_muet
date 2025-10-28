@@ -24,7 +24,7 @@ yarn-error.log
 /public
 vendor.zip
 node_modules.zip
-/dist/
+# /dist/
 /deploy-repo/
 guideline/developer-notes.txt
 /guideline
