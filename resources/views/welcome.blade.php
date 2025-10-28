@@ -1,3 +1,3 @@
 <div>
-    Welcome
+    Welcome to pitp dashboard
 </div>
