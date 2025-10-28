@@ -118,7 +118,7 @@ jobs:
           git config user.email "actions@github.com"
           git add -A
 
-          # ✅ Always deploy — even if Git thinks no change
+          # ✅ Always make a commit (even if no diff)
           if git diff --cached --quiet; then
             echo "Forcing deploy commit (even if no diff)"
             git commit --allow-empty -m "Force redeploy from ${GITHUB_SHA}"
@@ -126,8 +126,14 @@ jobs:
             git commit -m "Deploy from ${GITHUB_SHA}"
           fi
 
+          # ✅ Fetch latest deploy branch
           git fetch origin deploy || true
-          git pull --rebase=false origin deploy || true
-          git push -v "$REPO_URL" HEAD:refs/heads/deploy
 
+          # ✅ Reset to remote to avoid conflicts
+          git reset --soft origin/deploy || true
 
+          # ✅ Pull with rebase to stay ahead
+          git pull origin deploy --rebase --strategy-option=ours || true
+
+          # ✅ Finally push with force-with-lease (safe force)
+          git push --force-with-lease -v "$REPO_URL" HEAD:refs/heads/deploy
