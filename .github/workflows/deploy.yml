@@ -118,8 +118,10 @@ jobs:
 
           git commit -m "Deploy from ${GITHUB_SHA}"
           git fetch origin deploy
-          git rebase origin/deploy
-          git push -v "$REPO_URL" HEAD:refs/heads/deploy
+          # Force fast-forward or overwrite with new dist snapshot
+          git reset --hard origin/deploy || true
+          git pull origin deploy --rebase=false || true
+          git push -f "$REPO_URL" HEAD:refs/heads/deploy
 
       - name: Deploy to cPanel via SSH
         if: github.ref == 'refs/heads/main'
