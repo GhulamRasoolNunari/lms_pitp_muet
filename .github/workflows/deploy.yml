@@ -124,8 +124,9 @@ jobs:
           fi
 
           git commit -m "Deploy from ${GITHUB_SHA}"
-          git fetch origin deploy
-          git rebase origin/deploy
+          git fetch origin deploy || true
+          git reset --hard origin/deploy || true
+          git pull --rebase=false origin deploy || true
           git push -v "$REPO_URL" HEAD:refs/heads/deploy
-          
+
 
