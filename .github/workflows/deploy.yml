@@ -2,17 +2,19 @@ name: Build & Publish Deploy Branch
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]   # trigger on pushes to main
 
+# let the workflow commit if we ever switch back to GITHUB_TOKEN
 permissions:
   contents: write
 
+# avoid race conditions: if multiple pushes happen quickly, cancel older runs
 concurrency:
   group: deploy-publish
   cancel-in-progress: true
 
 env:
-  APP_PATH: .
+  APP_PATH: .   # your app is at repo root
 
 jobs:
   build-and-publish:
@@ -56,15 +58,18 @@ jobs:
       - name: Prepare dist snapshot
         run: |
           set -e
-          mkdir -p dist
           rsync -a "${APP_PATH}/" dist/ \
             --exclude ".git" --exclude ".github" --exclude "node_modules" \
             --exclude "tests" --exclude ".env*"
 
+          # ✅ FIX ADDED — copy vite build output into dist/public/build
           mkdir -p dist/public/build
           rsync -a "${APP_PATH}/public/build/" dist/public/build/ || true
+
+          # hard fail if vite manifest missing
           test -f dist/public/build/manifest.json
 
+          # keep runtime stuff out of git
           printf "%s\n" \
             ".env" \
             ".env.*" \
@@ -73,6 +78,7 @@ jobs:
             "storage/framework/sessions/*" \
             "storage/framework/views/*" > dist/.gitignore
 
+      # === Publish to `deploy` without force; always base on latest remote tip ===
       - name: Publish deploy branch (fast-forward, no force)
         env:
           REPO_URL: https://x-access-token:${{ secrets.DeployToken }}@github.com/${{ github.repository }}.git
@@ -81,6 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           set -x
+
           echo "Preflight auth check against $REPO_URL"
           git ls-remote "$REPO_URL" >/dev/null
 
@@ -118,20 +125,7 @@ jobs:
 
           git commit -m "Deploy from ${GITHUB_SHA}"
           git fetch origin deploy
-          # Force fast-forward or overwrite with new dist snapshot
-          git reset --hard origin/deploy || true
-          git pull origin deploy --rebase=false || true
-          git push -f "$REPO_URL" HEAD:refs/heads/deploy
+          git rebase origin/deploy
+          git push -v "$REPO_URL" HEAD:refs/heads/deploy
+          
 
-      - name: Deploy to cPanel via SSH
-        if: github.ref == 'refs/heads/main'
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: pitp.online
-          username: ${{ secrets.FTP_USERNAME }}
-          key: ${{ secrets.CPANEL_SSH_KEY }}
-          script: |
-            cd public_html/pitp.online/prod
-            git fetch origin deploy
-            git reset --hard origin/deploy
-            echo "✅ Code pulled successfully from deploy branch!"
