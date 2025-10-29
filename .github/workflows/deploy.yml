@@ -78,7 +78,7 @@ jobs:
           fi
 
           cd ..
-          rsync -a --delete dist/ deploy-repo/
+          rsync -a --delete dist/ ./deploy-repo/ --exclude 'dist' --exclude '.git'
 
           cd deploy-repo
           git config user.name "github-actions"
