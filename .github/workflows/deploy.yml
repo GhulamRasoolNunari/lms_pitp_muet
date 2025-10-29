@@ -81,6 +81,10 @@ jobs:
           rsync -a --delete dist/ ./deploy-repo/ --exclude 'dist' --exclude '.git'
 
           cd deploy-repo
+
+           # ✅ Remove dist folder (we don’t need it on cPanel)
+          rm -rf dist
+
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add -A
