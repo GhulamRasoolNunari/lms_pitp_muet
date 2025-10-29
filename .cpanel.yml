@@ -1,0 +1,16 @@
+deployment:
+  tasks:
+    - /bin/bash -lc 'git fetch --all --prune'
+
+    # Discard local changes safely, keep env, storage, and upload folders
+    - /bin/bash -lc "git reset --hard"
+    - /bin/bash -lc "git clean -fd -e .env -e storage -e public/uploads -e public/attachments -e public/file -e public/form_assets"
+
+    # Checkout deploy branch again cleanly
+    - /bin/bash -lc "git checkout deploy"
+    - /bin/bash -lc "git reset --hard origin/deploy"
+    - /bin/bash -lc "git clean -fd -e .env -e storage -e public/uploads -e public/attachments -e public/file -e public/form_assets"
+
+    # Optimize Laravel
+    - /bin/bash -lc "php artisan optimize:clear || true"
+    - /bin/bash -lc "php artisan optimize || true"
